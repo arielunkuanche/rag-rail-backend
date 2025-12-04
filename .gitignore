@@ -1,0 +1,26 @@
+# --- Python General ---
+python_ingestion/__pycache__/
+python_ingestion/data/
+*.py[cod]
+*.so
+
+# --- Jupyter Notebooks ---
+notebooks/
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# --- Virtual Environment ---
+venv/
+.venv/
+
+# --- Secrets Environment Variables ---
+.env 
+python_ingestion/.env 
+backend/.env
+
+# --- Testing Artifacts ---
+.pytest_cache/
+.benchmarks/
+.coverage
+htmlcov/
+test-results/
