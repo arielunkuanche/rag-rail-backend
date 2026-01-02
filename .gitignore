@@ -18,6 +18,26 @@ venv/
 python_ingestion/.env 
 backend/.env
 
+# Local IDE configuration
+.vscode/
+
+# --- Node.js and Express Backend ---
+
+# Dependencies
+backend/node_modules/
+
+# Local IDE configuration
+backend/.vscode/
+
+# Build and logs
+backend/dist/
+backend/build/
+backend/*.log
+backend/logs/
+backend/npm-debug.log*
+backend/yarn-debug.log*
+backend/yarn-error.log*
+
 # --- Testing Artifacts ---
 .pytest_cache/
 .benchmarks/

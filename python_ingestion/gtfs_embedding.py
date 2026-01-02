@@ -22,7 +22,6 @@ class EmbeddingGenerator:
         print(f"8. Single query embedding starts...")
         if not text:
             return []
-    
         embedding = self.model.encode(
             text, 
             convert_to_numpy=True,
@@ -53,7 +52,6 @@ class EmbeddingGenerator:
         print(f"--- 6. Batch embedding starts for {total_docs} documents ---")
         for batch, start_idx in self._batch_iterator(documents, batch_size):
             texts = [d['text'] for d in batch]
-
             try:
                 batch_embeddings = self.model.encode(
                     texts,
