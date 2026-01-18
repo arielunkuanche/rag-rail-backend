@@ -7,9 +7,12 @@
  *   - Ambiguous cases
  */
 
+const { getStopByQuery } = require("../services/stopService");
+
 const EXACT_TRAIN_PATTERNS = [
     /\bIC\s?\d+\b/i,
     /\bS\s?\d+\b/i,
+    /\bHDM\s?\d+\b/i,
     /\bPYO\s?\d+\b/i,
     /\bHL\s?\d+\b/i,
     /\b[A-Z]\s?\(HL\s*\d+\)\b/i,
@@ -41,6 +44,20 @@ const normalizeTrain = (token) => {
     return normalized;
 }
 
+// Normalize function used for stop detection 
+const normalizeWord = (token) => {
+    return token.toLowerCase()
+        .replace(/[.,?!:;()]/g, "")
+        .replace(/\b(station|asema|stop|platform)\b/g, "")
+};
+
+const ROUTE_PATTERNS = [
+    /from\s+(.+?)\s+to\s+(.+)/i,
+    /between\s+(.+?)\s+and\s+(.+)/i,
+    /(.+?)\s*→\s*(.+)/,
+    /route\s/i
+];
+
 /**
  * Attempts to detect exact train identifier
  */
@@ -64,7 +81,7 @@ const detectTrainFamily = (query) => {
         return null;
     };
 
-    const match = query.match(TRAIN_FAMILY_PATTERN);
+    const match = query.toUpperCase().match(TRAIN_FAMILY_PATTERN);
     if (match) {
         console.log("Train family match found: ", match);
         const family = (match[1] || match[0]).toUpperCase();
@@ -79,15 +96,38 @@ const detectTrainFamily = (query) => {
  * Detect stop intent
  */
 const detectStopIntent = (query) => {
-    return /\b(stop|station|platform|asema)\b/i.test(query);
+    console.log("[Detect query intent] user query falls in detectStopIntent? ", query);
+    const wordsArray = query
+        .split(/\s+/)
+        .map(word => normalizeWord(word))
+        .filter(Boolean);
+
+    console.log("[Detect stop intent] words: ", wordsArray);
+
+    // Directly use extracted meaningful stop name to match with DB stops data instead of guessing stop name position in query
+    const stop = getStopByQuery(wordsArray);
+    if (stop) return stop;
+
+    return null;
 }
 
 /**
  * Detect route intent, from X to Y, between A and B
  */
 const detectRouteIntent = (query) => {
-    return /\bfrom\b.+\bto\b|\bbetween\b.+\band\b|\broute\b/i.test(query);
-}
+    for (const pattern of ROUTE_PATTERNS) {
+        const match = query.match(pattern);
+
+        if (match) {
+            console.log("Route detected intent match found: ", match);
+            return {
+                origin: match[1].trim(),
+                destination: match[2].trim()
+            };
+        };
+        return null;
+    }
+};
 
 const detectQueryIntent = (queryText) => {
     if (!queryText) return { intent: "general" };
@@ -112,17 +152,25 @@ const detectQueryIntent = (queryText) => {
         }
     };
 
-    // 3. Stop intent
-    if (detectStopIntent(query)) {
+    // 3. Stop intent goes before route detection
+    const stop = detectStopIntent(query);
+    if (stop) {
         return {
-            intent: "stop"
+            intent: "stop",
+            stop: stop,
+            routeContext: {
+                origin: "",
+                destination: ""
+            } | null
         }
-    }; 
+    }
 
     // 4. Route intent
-    if (detectRouteIntent(query)) {
+    const route = detectRouteIntent(query);
+    if (route) {
         return {
-            intent: "route"
+            intent: "route",
+            direction: route
         }
     };
 

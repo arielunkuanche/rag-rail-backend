@@ -20,9 +20,10 @@ const loadStops = async () => {
 
         stops.forEach(stop => {
             stopsData[stop.metadata.stop_id] = {
+                stop_id: stop.metadata.stop_id,
                 stop_name: stop.metadata.stop_name,
-                stop_lat: stop.metadata.lat,
-                stop_lon: stop.metadata.lon
+                stop_lat: stop.metadata.stop_lat,
+                stop_lon: stop.metadata.stop_lon
             }
         });
 
@@ -35,10 +36,40 @@ const loadStops = async () => {
     }
 };
 
-const getStopInfo = (stopId) => {
-    if (!stopsData[stopId]) return `Can't find stop info in database for stop Id ${stopId}.`;
+const getStopById = (stopId) => {
+    if (!stopsData[stopId]) return null;
 
     return stopsData[stopId];
 };
 
-module.exports = { loadStops, getStopInfo }
+const getStopByName = (stopName) => {
+    if (!stopName) return null;
+
+    for (const stopId in stopsData) {
+        const stop = stopsData[stopId];
+        if (stop.stop_name && stop.stop_name.toLowerCase().includes(stopName.toLowerCase())) {
+            console.log("[getStopByName] found stop object from DB: ", stop);
+            return stop;
+        };
+        
+    };
+    return null;
+};
+
+const getStopByQuery = (textArray) => {
+    console.log("[getStopByQuery] get textArray: ", textArray);
+    if (!textArray || textArray.length === 0) return null;
+
+    for (const stopId in stopsData) {
+        const stop = stopsData[stopId];
+        for (let i = 0; i < textArray.length; i++) {
+            if (textArray[i].includes(stop.stop_name.toLowerCase())) {
+                console.log("[getStopByQuery] match stop from query: ", stop.stop_name);
+                return stop;
+            }
+        }
+    };
+    return null;
+}
+
+module.exports = { loadStops, getStopById, getStopByName, getStopByQuery }

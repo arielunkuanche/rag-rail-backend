@@ -194,7 +194,7 @@ class GTFSProcessor:
         unique_trips = []
 
         # Group by trip_id and create basic trip summaries first
-        print(f"--- 5. Processing stop_times_df group with trip_id ... ---")
+        print(f"\n--- 5. Processing stop_times_df group with trip_id ... ---")
         for trip_id, group in stop_times_df.groupby('trip_id'):
             group_sorted = group.sort_values('stop_sequence')
 
@@ -210,7 +210,11 @@ class GTFSProcessor:
 
             # Collect formatted stops for each trip
             formatted_stops = []
+            stop_names = []
             for _, row in group_sorted.iterrows():
+                stop_name = row['stop_name']
+                stop_names.append(stop_name)
+
                 time = row.get('departure_time') or row.get('arrival_time') or ''
                 # Normalize time format HH:MM:SS -> HH:MM
                 if isinstance(time, str) and re.match(r'\d{2}:\d{2}:\d{2}', time):
@@ -224,7 +228,8 @@ class GTFSProcessor:
                 'train_number': train_number,
                 'origin': origin_stop,
                 'destination': destination_stop,
-                'stops': formatted_stops
+                'formatted_stops': formatted_stops,
+                'stops': stop_names
             })
         print(f"\n unique_trips array first element: \n {unique_trips[0]}")
         # Dedupe patterns by semantic key
@@ -256,7 +261,7 @@ class GTFSProcessor:
             text = (
                 f"TRAIN PATTERN: Train {trip['train_number']} on Route {trip['route_id']}. "
                 f"Traveling from {trip['origin']} to {trip['destination']}. "
-                f"Key stops includes: {', '.join(trip['stops'][:20])}."
+                f"Key stops includes: {', '.join(trip['formatted_stops'][:20])}."
             )
             
             documents.append({
@@ -269,61 +274,12 @@ class GTFSProcessor:
                     'train_number': trip['train_number'],
                     'origin': trip['origin'],
                     'destination': trip['destination'],
-                    'stop_count': len(trip['stops']),
+                    'stop_count': len(trip['formatted_stops']),
+                    'stops':trip['stops'],
+                    'formatted_stops': trip['formatted_stops'],
                     'updated_at': datetime.now(timezone.utc).isoformat()
                 }
             })
-
-        """if 'stops' in self.data:
-            stop_times_df = stop_times_df.merge(
-                self.data['stops'][['stop_id', 'stop_name']],
-                on='stop_id',
-                how='left'
-            )
-            print(f"Stop_times merged stops file rows: {len(stop_times_df)}")
-            print(f"\n--- DEMO: First Row (iloc[0]) ---")
-            print(stop_times_df.iloc[0].to_string())
-
-        print(f" -> stop_times_df table head merge with 'stops': {stop_times_df.head()}")
-        print(f" -> stop_times_df rows after merged before clean up: {len(stop_times_df)}")"""
-    
-
-        # Group by trip for better context
-        #trip_id_sample = stop_times_df['trip_id'].iloc[0]
-        #print(f" -> Example first row data from stop_times_df : {stop_times_df.groupby('trip_id').get_group(trip_id_sample)}")
-        """for trip_id, group in stop_times_df.groupby('trip_id'):
-            group_sorted = group.sort_values('stop_sequence')
-            origin_stop = group_sorted.iloc[0].get('stop_name', 'Unknown')
-            destination_stop = (
-                group_sorted.iloc[0].get('trip_headsign')
-                if pd.notna(group_sorted.iloc[0].get('trip_headsign'))
-                else group_sorted.iloc[-1].get('stop_name', 'Unknown')
-            )
-
-            trip_stops = []
-            for _, row in group_sorted.iterrows():
-                stop_info = f"{row.get('stop_name', 'Unknown')} at {row.get('arrival_time', 'N/A')}"
-                trip_stops.append(stop_info)
-            
-            text = (
-                f"Trip {trip_id} {origin_stop} to {destination_stop}."
-                f"Direction: {origin_stop} -> {destination_stop}."
-                f"Stops include: {', '.join(trip_stops[:14])}"
-            )
-            
-            documents.append({
-                'text': text,
-                'metadata': {
-                    'type': 'trip',
-                    'trip_id': str(trip_id),
-                    'route_id': str(group.iloc[0].get('route_id', '')),
-                    'service_id': str(group.iloc[0].get('service_id', '')),
-                    'origin': origin_stop,
-                    'destination': destination_stop,
-                    'stop_count': len(group),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }
-            })"""
         
         print(f" \nFinal stop_times DF size: {stop_times_df.groupby('trip_id').size()})")
         print(f" \n✅ Successfully processing stop_times canonical patterns with {len(documents)} files---")

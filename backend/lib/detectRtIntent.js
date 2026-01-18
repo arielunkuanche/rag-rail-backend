@@ -3,7 +3,7 @@
  */
 
 const rt_keywords = [
-    "delay", "late", "now", "where", "status", "update", "track", "live", "right now", "next",
+    "on time", "delay", "late", "now", "where", "status", "update", "track", "live", "right now", "tonight", "next",
     "current", "currently", "position", "cancel", "disruption", "platform", "broken", "running"
 ];
 

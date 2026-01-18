@@ -11,6 +11,7 @@ const { detectQueryIntent } = require("../lib/detectQueryIntent");
 const { generateResponse } = require("./llmService");
 const { handleTrainExact, handleTrainGroup } = require("./retrievers/trainRetriever");
 const { routeRetriever } = require("./retrievers/routeRetriever");
+const { stopRetriever } = require("./retrievers/stopRetriever");
 
 const getRagResults =  async(queryText) => {
     const startTime = Date.now().toString();
@@ -24,11 +25,11 @@ const getRagResults =  async(queryText) => {
         switch (intent.intent) {
             case "train-exact":
                 retrieval = await handleTrainExact(queryText, intent);
-                console.log("[RAG SERVICE] received exact retrieval: ", retrieval);
+                //console.log("[RAG SERVICE] received exact retrieval: ", retrieval);
                 break;
             case "train-group":
                 retrieval = await handleTrainGroup(queryText, intent);
-                console.log("[RAG SERVICE] received group retrieval: ", retrieval);
+                //console.log("[RAG SERVICE] received group retrieval: ", retrieval);
                 break;
             case "train-ambiguous":
                 return {
@@ -39,11 +40,11 @@ const getRagResults =  async(queryText) => {
                 };
             case "route":
                 retrieval = await routeRetriever(queryText, intent);
-                console.log("[RAG SERVICE] received route retrieval: ", retrieval);
+                //console.log("[RAG SERVICE] received route retrieval: ", retrieval);
                 break;
             case "stop":
                 retrieval = await stopRetriever(queryText, intent);
-                console.log("[RAG SERVICE] received stop retrieval: ", retrieval);
+                //console.log("[RAG SERVICE] received stop retrieval: ", retrieval);
                 break;
             default: 
                 return {

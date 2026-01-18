@@ -109,14 +109,14 @@ const fetchRealTimeUpdates = async(forceRefresh = false) => {
         }
     } catch (err) {
         if (cache.data) {
-            console.warn("API fetch failed, returning cache data: ", err.message);
+            console.warn("API fetch failed, returning cache data: ", err);
             return {
                 data: cache.data,
                 timestamp: cache.timestamp,
                 source: "stale_cache"
             };
         };
-        console.log("Failed to fetch updated RT-GTFS and no cache is available.")
+        console.log("Failed to fetch updated RT-GTFS and no cache is available: ", err)
         throw err;
     }
 

@@ -24,7 +24,7 @@ queryRouter.post("/search", async (req, res) => {
         console.error("Error processing user query search:", err.message || err);
         res.status(500).json({ 
             error: "Query processing failed",
-            details: `${err.message || "Internal server error"}`
+            details: `${err || "Internal server error"}`
         });
     }
 });
