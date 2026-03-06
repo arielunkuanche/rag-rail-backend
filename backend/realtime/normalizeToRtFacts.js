@@ -5,6 +5,24 @@
  */
 const { getStopById } = require("../services/stopService");
 
+const SCHEDULE_RELATIONSHIP_ENUM = {
+    0: "SCHEDULED",
+    1: "SKIPPED",
+    2: "NO_DATA",
+    3: "UNSCHEDULED"
+};
+
+const mapScheduleRelationship = (value) => {
+    if (typeof value === "number") {
+        return SCHEDULE_RELATIONSHIP_ENUM[value] || `UNKNOWN_${value}`;
+    }
+    if (typeof value === "string") {
+        const normalized = value.trim().toUpperCase();
+        return normalized || "UNKNOWN";
+    }
+    return "UNKNOWN";
+};
+
 // Extracts all stop_time_update for relevant tripUpdates
 const normalizeToRtFacts = (tripUpdates) => {
     if (!tripUpdates || !Array.isArray(tripUpdates)) return [];
@@ -41,9 +59,13 @@ const normalizeToRtFacts = (tripUpdates) => {
             //     console.log("[normalizeToRtFacts] delay seconds found: ", routeId, stopName, delaySeconds);
             // };
             
+            const scheduleRelationshipRaw = stu.scheduleRelationship;
+            const scheduleRelationshipLabel = mapScheduleRelationship(scheduleRelationshipRaw);
+
             let delayCategory = "on_time";
-            // console.log("[normalizeToRtFacts] stopTimeUpdate schedule relationship: ", stu.scheduleRelationship); // stu.scheduleRelationship is 0 or 1
-            if (stu.scheduleRelationship === 'SKIPPED') delayCategory = "cancelled";
+            if (scheduleRelationshipLabel === "SKIPPED") delayCategory = "cancelled";
+            else if (scheduleRelationshipLabel === "NO_DATA") delayCategory = "no_data";
+            else if (scheduleRelationshipLabel === "UNSCHEDULED") delayCategory = "unscheduled";
             else if (delaySeconds > 60) delayCategory = "delayed";
             else if (delaySeconds < -60) delayCategory = "early";
 
@@ -56,6 +78,8 @@ const normalizeToRtFacts = (tripUpdates) => {
                 stopSequence: stu.stopSequence,
                 delay: delaySeconds,
                 status: delayCategory,
+                scheduleRelationshipRaw,
+                scheduleRelationshipLabel,
                 arrivalDelay: stu.arrival?.delay || null,
                 departureDelay: stu.departure?.delay || null,
                 timestamp: Date.now()

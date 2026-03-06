@@ -27,7 +27,8 @@ const vectorSearch = async (queryEmbedding, options ={}) => {
                     'numCandidates': 4000,
                     'limit': searchCandidatesLimit,
                     'index': vectorIndex,
-                    'filter': filter
+                    'filter': filter,
+                    minScore
                 }
             },
             {

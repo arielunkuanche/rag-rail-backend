@@ -8,6 +8,9 @@ const connectDB = async () => {
     if (db) return db;
 
     const uri = process.env.MONGODB_URI;
+    if (!uri || typeof uri !== "string" || uri.trim() === "") {
+        throw new Error("MONGODB_URI is required for database connection.");
+    }
     mongoClient = new MongoClient(uri);
 
     await mongoClient.connect();

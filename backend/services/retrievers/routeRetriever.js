@@ -5,6 +5,17 @@ const { fetchRealTimeUpdates } = require("../gtfsRtService");
 const { queryEmbedding } = require("../queryEmbedding");
 const { vectorSearch } = require("../vectorSearch");
 
+const normalizePlaceName = (value = "") => {
+    if (!value || typeof value !== "string") return "";
+
+    return value
+        .trim()
+        .replace(/[.,?!:;()]+$/g, "")
+        .replace(/\s+/g, " ")
+        .toLowerCase()
+        .replace(/\b\w/g, char => char.toUpperCase());
+};
+
 const routeRetriever = async (queryText, intent) => {
     const { origin, destination } = intent.direction || {};
 
@@ -22,7 +33,18 @@ const routeRetriever = async (queryText, intent) => {
     const queryVector = await queryEmbedding(queryText);
 
     // 2. Vector search using filter
-    const filter = { "metadata.type": "trip_pattern" };
+    const normalizedOrigin = normalizePlaceName(origin);
+    const normalizedDestination = normalizePlaceName(destination);
+    const filter = {
+        "metadata.type": "trip_pattern"
+    };
+    if (normalizedOrigin) {
+        filter["metadata.origin"] = normalizedOrigin;
+    }
+    if (normalizedDestination) {
+        filter["metadata.destination"] = normalizedDestination;
+    }
+
     console.log("\n[Route Retriever] get vector search filter: ", filter);
     const searchResults = await vectorSearch(queryVector, {
         filter,
@@ -34,8 +56,8 @@ const routeRetriever = async (queryText, intent) => {
     retrieverPackage.staticDocs = searchResults;
 
     // 3. Extract Ids
-    routeIds = [...new Set(searchResults.map(doc => doc.metadata.route_id))];
-    tripIds = [...new Set(searchResults.map(doc => doc.metadata.trip_id))];
+    const routeIds = [...new Set(searchResults.map(doc => doc.metadata.route_id))];
+    const tripIds = [...new Set(searchResults.map(doc => doc.metadata.trip_id))];
     console.log("[Route Retriever]routeIds and tripIds set from search results: ", routeIds, tripIds);
 
     retrieverPackage.routeIds = routeIds;
@@ -45,7 +67,7 @@ const routeRetriever = async (queryText, intent) => {
     const { needsRt }= detectRtIntent(queryText);
     console.log("[Route Retriever] Activate rt data fetch or not?", needsRt);
 
-    if (!needsRt || routeIds.length === 0) return {};
+    if (!needsRt || routeIds.length === 0) return retrieverPackage;
 
     const rtRaw = await fetchRealTimeUpdates();
     console.log(`[Route Retriever] ready to sent RT tripUpdates to sanitize. 

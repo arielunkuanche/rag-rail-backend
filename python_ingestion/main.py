@@ -7,8 +7,7 @@ from mongodb_client import MongoDBClient
 from gtfs_realtime import GTFSRealtimeClient
 import traceback
 
-
-class main():
+def main():
     print("=" * 60)
     print("Python Data Ingestion Pipeline")
     print("=" * 60)

@@ -12,7 +12,7 @@ queryRouter.post("/search", async (req, res) => {
         const { queryText } = req.body;
 
         if(!queryText || typeof queryText !== "string") {
-            res.status(400).json({ message: "Missing user query text or invalid format in request."})
+            return res.status(400).json({ message: "Missing user query text or invalid format in request."})
         };
         const result = await getRagResults(queryText)
         //Return the RAG final answer

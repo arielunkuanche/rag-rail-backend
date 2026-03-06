@@ -44,3 +44,9 @@ backend/yarn-error.log*
 .coverage
 htmlcov/
 test-results/
+
+# --- AGENTS --- 
+AGENTS.md
+
+# -- Refactor plans --
+docs/

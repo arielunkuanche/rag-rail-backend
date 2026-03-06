@@ -5,9 +5,46 @@ const { sanitizeLLMOutput } = require("../lib/sanitizeLLMOutput");
 dotenv.config();
 
 const key = process.env.GEMINI_API_KEY;
-if(!key) throw new Error("LLM API Key is required.")
+const aiClient = key ? new GoogleGenAI({ apiKey: key }) : null;
 
-const aiClient = new GoogleGenAI({ apiKey: key });
+const buildFallbackResponse = (notes) => ({
+    answer: "I encountered a technical error while processing the data.",
+    static_context_used: [],
+    realtime_context_used: [],
+    related_routes: [],
+    related_train_numbers_or_groups: [],
+    confidence: "low",
+    notes: String(notes || "Unknown LLM response error")
+});
+
+const normalizeLLMResponse = (parsed) => {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return buildFallbackResponse("LLM output was not a JSON object.");
+    }
+
+    const trainRefs =
+        parsed.related_train_numbers_or_groups ??
+        parsed.related_train_number_or_group ??
+        parsed["related_train_number/group"] ??
+        [];
+
+    const normalized = {
+        answer: typeof parsed.answer === "string" ? parsed.answer : "",
+        static_context_used: Array.isArray(parsed.static_context_used) ? parsed.static_context_used : [],
+        realtime_context_used: Array.isArray(parsed.realtime_context_used) ? parsed.realtime_context_used : [],
+        related_routes: Array.isArray(parsed.related_routes) ? parsed.related_routes : [],
+        related_train_numbers_or_groups: Array.isArray(trainRefs) ? trainRefs : [],
+        confidence: ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "low",
+        notes: typeof parsed.notes === "string" ? parsed.notes : ""
+    };
+
+    if (!normalized.answer) {
+        normalized.answer = "I could not generate a reliable answer from the available context.";
+        normalized.confidence = "low";
+    }
+
+    return normalized;
+};
 
 /**
  * 
@@ -17,6 +54,10 @@ const aiClient = new GoogleGenAI({ apiKey: key });
  * @returns 
  */
 const generateResponse = async(queryText, staticDocs = [], realtime = {}) => {
+    if (!aiClient) {
+        return buildFallbackResponse("LLM API Key is required.");
+    }
+
     console.log("[LLM Service] received static and RT context:\n ", staticDocs, realtime);
 
     // 1. Set up time awareness for questions on "next", "now"
@@ -57,7 +98,7 @@ const generateResponse = async(queryText, staticDocs = [], realtime = {}) => {
     } else {
         // CASE B: The RT system failed or wasn't requested
         realtimeBlock += `Realtime status: UNAVAILABLE\n`;
-        realtimeBlock = `Realtime summary: No active realtime updates available. Assume usage of static schedule only.\n`;
+        realtimeBlock += `Realtime summary: No active realtime updates available. Assume usage of static schedule only.\n`;
     }
 
     // 4. Construct system instruction
@@ -69,7 +110,7 @@ const generateResponse = async(queryText, staticDocs = [], realtime = {}) => {
         INSTRUCTIONS:
         1. Answer the user's question using the provided context.
         2. IF Realtime Context says "All trains running on schedule", treat this as a FACT. Do not apologize for lack of data.
-        3. IF Realtime Context is "UNAVAILABLE", explicitely state: "Real-time tracking is currently unavailable."
+        3. IF Realtime Context is "UNAVAILABLE", explicitly state: "Real-time tracking is currently unavailable."
         4. Always cite the Static Context used in the "static_context_used" array. 
         5. Do NOT include markdown or \`\`\` characters.
         
@@ -80,7 +121,7 @@ const generateResponse = async(queryText, staticDocs = [], realtime = {}) => {
             "static_context_used": ["string"],
             "realtime_context_used": ["string"],
             "related_routes": "[string or null]",
-            "related_train_number/group": ["string"],
+            "related_train_numbers_or_groups": ["string"],
             "confidence": "high | medium | low",
             "notes": "string"
         }
@@ -113,23 +154,21 @@ const generateResponse = async(queryText, staticDocs = [], realtime = {}) => {
         const rawText = res.text|| "";
         console.log("LLM response generated:\n", rawText);
 
-        //const sanitizedResult = sanitizeLLMOutput(rawText);
-        //console.log("Sanitized LLM JSON string:\n", sanitizedResult);
-        //const finalAnswer = JSON.parse(sanitizedResult);
+        let parsed;
+        try {
+            parsed = JSON.parse(rawText);
+        } catch (parseErr) {
+            const sanitizedResult = sanitizeLLMOutput(rawText);
+            console.warn("[LLM Service] raw JSON parse failed, retrying with sanitized output.");
+            parsed = JSON.parse(sanitizedResult);
+        }
 
-        const finalAnswer = JSON.parse(rawText);
+        const finalAnswer = normalizeLLMResponse(parsed);
+        console.log("[LLM Service] parse text to final JSON answer object:\n", finalAnswer);
         return finalAnswer;
     } catch (err) {
         console.error(`Error in LLM service while generating response: ${err}` );
-        return {
-            answer: "I encountered a technical error while processing the data.",
-            static_context_used: [],
-            realtime_context_used: [],
-            related_routes: [],
-            related_train_number_or_group: [],
-            confidence: "low",
-            notes: String(err)
-        };
+        return buildFallbackResponse(err);
     }
 }
 

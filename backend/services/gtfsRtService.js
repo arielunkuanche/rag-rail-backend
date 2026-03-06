@@ -27,8 +27,23 @@ const parseRTData = async () => {
         const tripUpdates = [];
         const vehicleUpdates = [];
         const alertUpdates = [];
+        const entityShapeStats = {
+            total: 0,
+            tripUpdate: 0,
+            vehiclePosition: 0,
+            vehicle: 0,
+            alert: 0
+        };
+        let firstVehicleEntityKeys = null;
+        let firstAlertEntityKeys = null;
 
         feed.entity.forEach(entity => {
+            entityShapeStats.total++;
+            if (entity.tripUpdate) entityShapeStats.tripUpdate++;
+            if (entity.vehiclePosition) entityShapeStats.vehiclePosition++;
+            if (entity.vehicle) entityShapeStats.vehicle++;
+            if (entity.alert) entityShapeStats.alert++;
+
             // 1. Process tripUpdate feed entity (delays and stop changes)
             if (entity.tripUpdate) {
                 tripUpdates.push({
@@ -41,22 +56,27 @@ const parseRTData = async () => {
                     raw: entity.tripUpdate
                 });
             };
-            // 2. Process vehiclePosition entity
-            if (entity.vehiclePosition) {
+            // 2. Process vehicle entity (binding may expose as vehicle or vehiclePosition)
+            const vehicleEntity = entity.vehicle || entity.vehiclePosition || null;
+            if (vehicleEntity) {
+                if (!firstVehicleEntityKeys) firstVehicleEntityKeys = Object.keys(entity);
                 vehicleUpdates.push({
                     id: entity.id,
-                    tripId: entity.vehiclePosition.trip?.tripId,
-                    routeId: entity.vehiclePosition.trip?.routeId,
-                    vehicleId: entity.vehiclePosition.vehicle?.vehicle?.id,
-                    vehicleLabel:entity.vehiclePosition.vehicle?.vehicle?.label,
-                    position: entity.vehiclePosition.position?(`latitude: ${latitude} longitude: ${longitude}`):(null),
-                    currentStatus: entity.vehiclePosition.currentStatus,
-                    timestamp: entity.vehiclePosition?.timestamp ?? null,
-                    raw: entity.vehiclePosition
+                    tripId: vehicleEntity.trip?.tripId,
+                    routeId: vehicleEntity.trip?.routeId,
+                    vehicleId: vehicleEntity.vehicle?.id || vehicleEntity.vehicle?.vehicle?.id,
+                    vehicleLabel: vehicleEntity.vehicle?.label || vehicleEntity.vehicle?.vehicle?.label,
+                    position: vehicleEntity.position
+                        ? (`latitude: ${vehicleEntity.position.latitude} longitude: ${vehicleEntity.position.longitude}`)
+                        : null,
+                    currentStatus: vehicleEntity.currentStatus,
+                    timestamp: vehicleEntity?.timestamp ?? null,
+                    raw: vehicleEntity
                 });
             };
             // 3. Process Alert entity
             if (entity.alert) {
+                if (!firstAlertEntityKeys) firstAlertEntityKeys = Object.keys(entity);
                 alertUpdates.push({
                     id: entity.id,
                     routeId: entity.alert?.informedEntity?.routeId,
@@ -68,6 +88,13 @@ const parseRTData = async () => {
                 });
             };
         });
+        console.log("[RT GTFS Service] Feed entity shape stats:", entityShapeStats);
+        if (firstVehicleEntityKeys) {
+            console.log("[RT GTFS Service] First vehicle entity keys:", firstVehicleEntityKeys);
+        }
+        if (firstAlertEntityKeys) {
+            console.log("[RT GTFS Service] First alert entity keys:", firstAlertEntityKeys);
+        }
         console.log("[RT GTFS Service] completed with first item of each rtUpdate feed object: ", 
             tripUpdates[0], vehicleUpdates[0], alertUpdates[0]);
         return { tripUpdates, vehicleUpdates, alertUpdates };

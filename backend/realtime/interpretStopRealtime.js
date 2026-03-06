@@ -9,7 +9,7 @@ const interpretStopRealtime = ({ stop, realtimeFacts }) => {
         return {
             hasRealtime: false,
             summary: `No active realtime updates found.`,
-            stats: { delayed: 0, early: 0, onTime: 0, cancelled: 0 },
+            stats: { delayed: 0, early: 0, onTime: 0, cancelled: 0, noData: 0, unscheduled: 0 },
             facts: []
         };
     };
@@ -24,17 +24,19 @@ const interpretStopRealtime = ({ stop, realtimeFacts }) => {
         return {
             hasRealtime: true,
             summary: `All trains are currently running on schedule (no active delay alerts) at stop ${stop.stop_name}.`,
-            stats: { delayed: 0, early: 0, onTime: 0, cancelled: 0 },
+            stats: { delayed: 0, early: 0, onTime: 0, cancelled: 0, noData: 0, unscheduled: 0 },
             facts: []
         };
     };
 
     // 3. Calculate realtime facts' delay status stats
-    const stats = { delayed: 0, early: 0, onTime: 0, cancelled: 0 };
+    const stats = { delayed: 0, early: 0, onTime: 0, cancelled: 0, noData: 0, unscheduled: 0 };
     matchedStopFacts.forEach(fact => {
         if (fact.status === "delayed") stats.delayed++;
         else if (fact.status === "early") stats.early++;
         else if (fact.status === "cancelled") stats.cancelled++;
+        else if (fact.status === "no_data") stats.noData++;
+        else if (fact.status === "unscheduled") stats.unscheduled++;
         else stats.onTime++; 
     });
 
@@ -45,6 +47,8 @@ const interpretStopRealtime = ({ stop, realtimeFacts }) => {
     if (stats.delayed > 0) summary += `${stats.delayed} are delayed. `;
     if (stats.early > 0) summary += `${stats.early} are early than schedule. `;
     if (stats.cancelled > 0) summary += `${stats.cancelled} are cancelled. `;
+    if (stats.noData > 0) summary += `${stats.noData} have no realtime stop data. `;
+    if (stats.unscheduled > 0) summary += `${stats.unscheduled} are marked as unscheduled updates. `;
     if (stats.onTime === total) summary += `All trains are running on schedule on ${stop.stop_name}.`;
 
     return {

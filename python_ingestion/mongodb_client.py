@@ -119,7 +119,7 @@ class MongoDBClient:
             'total_documents': self.collection.count_documents({}),
             'stops': self.collection.count_documents({'metadata.type': 'stop'}),
             'routes': self.collection.count_documents({'metadata.type': 'route'}),
-            'trips': self.collection.count_documents({'metadata.type': 'trip'})
+            'trips': self.collection.count_documents({'metadata.type': 'trip_pattern'})
         }
 
         return stats
