@@ -30,7 +30,12 @@ const stopRetriever = async (queryText, intent) => {
         stop: stopObject,
         routeContext,
         staticDocs: [],
-        realtime: {}
+        realtime: {},
+        retrievalStatus: {
+            code: "OK",
+            scope: "stop",
+            message: ""
+        }
     };
 
     // 2. Embed user query
@@ -41,31 +46,75 @@ const stopRetriever = async (queryText, intent) => {
         "metadata.type": "trip_pattern",
         "metadata.stops": stopObject.stop_name
     };
+    const stopDedupe = {
+        enabled: true,
+        keyFields: ["route_pattern_id"],
+        applyTypes: ["trip_pattern"]
+    };
     const destination = normalizePlaceName(routeContext?.destination);
-    const destinationFilter = destination
+    const destinationExactFilter = destination
         ? { ...baseFilter, "metadata.destination": destination }
         : null;
+    let stageUsed = destinationExactFilter ? "destination_exact" : "stop_only";
+    let searchResults = [];
 
-    const activeFilter = destinationFilter || baseFilter;
-    console.log(`\n[Stop Retriever] Vector search filter triggered: \n`, activeFilter);
-    let searchResults = await vectorSearch(queryVector, {
-        filter: activeFilter,
-        limit: 4,
-        minScore: 0.70
-    });
-
-    if (destinationFilter && searchResults.length === 0) {
-        console.log("[Stop Retriever] destination-aware filter returned 0 results. Falling back to stop-only filter.");
+    // Pass 1: current stop + exact destination in metadata.destination
+    if (destinationExactFilter) {
+        console.log(`\n[Stop Retriever] vector search filter (destination_exact): \n`, destinationExactFilter);
         searchResults = await vectorSearch(queryVector, {
-            filter: baseFilter,
-            limit: 4,
-            minScore: 0.70
+            filter: destinationExactFilter,
+            limit: 8,
+            minScore: 0.75,
+            dedupe: stopDedupe
         });
     }
 
-    console.log(`\n[Stop Retriever] static vector search results: \n`, searchResults);
+    // Pass 2: current stop + destination appears as a stop in the trip pattern
+    if (destinationExactFilter && searchResults.length === 0) {
+        console.log("[Stop Retriever] destination_exact returned 0 results. Trying stop+destination-in-stops stage.");
+        const stopCandidates = await vectorSearch(queryVector, {
+            filter: baseFilter,
+            limit: 12,
+            minScore: 0.70,
+            dedupe: stopDedupe
+        });
+
+        const viaStopResults = stopCandidates.filter(doc =>
+            Array.isArray(doc?.metadata?.stops) && doc.metadata.stops.includes(destination)
+        );
+
+        console.log(`[Stop Retriever] stop+destination-in-stops viaStopResults=${viaStopResults.length}`);
+        if (viaStopResults.length > 0) {
+            stageUsed = "destination_in_stops";
+            searchResults = viaStopResults.slice(0, 8);
+        } else {
+            stageUsed = "stop_only_fallback";
+            searchResults = stopCandidates.slice(0, 8);
+        }
+    }
+
+    // Pass 3: only stop filter (for queries without routeContext.destination)
+    if (!destinationExactFilter) {
+        console.log(`\n[Stop Retriever] vector search filter (stop_only): \n`, baseFilter);
+        searchResults = await vectorSearch(queryVector, {
+            filter: baseFilter,
+            limit: 8,
+            minScore: 0.70,
+            dedupe: stopDedupe
+        });
+    }
+
+    console.log("[Stop Retriever] final retrieval stage used:", stageUsed);
+    //console.log(`\n[Stop Retriever] static vector search results: \n`, searchResults);
 
     retrieverPackage.staticDocs = searchResults;
+    if (searchResults.length === 0) {
+        retrieverPackage.retrievalStatus = {
+            code: "NO_STATIC_MATCH",
+            scope: "stop",
+            message: `No static stop traveling route matches found for stop ${stopObject.stop_name}.`
+        };
+    }
     console.log("[Stop Retriever] retrieverPackage before getting RT updates: ", retrieverPackage);
 
     // 3. Optionally RT updates based on needs

@@ -1,10 +1,14 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const dotenv = require("dotenv");
 const { connectDB } = require("./config/db");
 const { loadStops } = require("./services/stopService");
 const { validateEnv } = require("./config/validateEnv");
 const { healthHandler, readyHandler, requireReady } = require("./middleware/readinessMiddleware");
+const { requestContextMiddleware } = require("./middleware/requestContextMiddleware");
+const { requestDebugMiddleware } = require("./middleware/requestDebugMiddleware");
+const { requestTimeoutMiddleware } = require("./middleware/requestTimeoutMiddleware");
 const { queryRouter } = require("./routes/queryRoutes");
 
 dotenv.config();
@@ -19,9 +23,14 @@ const runtimeState = {
     lastBootError: null
 };
 
+app.disable("x-powered-by");
+app.use(helmet());
 app.use(cors());
-
-app.use(express.json())
+app.use(requestContextMiddleware);
+app.use(express.json());
+if (process.env.NODE_ENV !== "production") {
+    app.use(requestDebugMiddleware);
+}
 
 app.get("/", (req, res) => {
     res.send("Finnish Railway RAG Backend API is running.");
@@ -30,11 +39,15 @@ app.get("/", (req, res) => {
 app.get("/health", healthHandler(runtimeState));
 app.get("/ready", readyHandler(runtimeState));
 
-app.use("/api/query", requireReady(runtimeState), queryRouter);
+// Added endpoint validation middleware
+app.use("/api/query", requestTimeoutMiddleware, requireReady(runtimeState), queryRouter);
 
 // Error Handler
 app.use((err, req, res, next) => {
-    console.error(err.stack);
+    if (res.headersSent) {
+        return next(err);
+    }
+    console.error("Error detected in error handler: ", err.stack);
     res.status(500).json({ message: "Something broke."})
 });
 

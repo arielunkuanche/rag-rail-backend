@@ -23,11 +23,8 @@ const EXACT_TRAIN_PATTERNS = [
  * 
 */
 const TRAIN_FAMILY_CONTEXT_PATTERNS = [
-    /\bline\s+([A-Z])\b/i,
-    /\b([A-Z])\s+line\b/i,
-    /\b([A-Z])\s+train\b/i,
-    /\bcommuter\s+([A-Z])\b/i,
-    /\blocal\s+([A-Z])\b/i,
+    /\b(?:train|line|commuter|local)\s+([A-Z])\b/i,
+    /\b([A-Z])\s+(?:train|line|commuter|local)\b/i,
     /\btrain\s+([A-Z])\b(?:\s*(?:line|service|route))?(?:\s*[?.!,]|$)/i
 ];
 
@@ -59,9 +56,10 @@ const normalizeTrain = (token) => {
 /**
  * Route intent patterns with require keywords define
  */
-const ROUTE_CUE_PATTERN = /\b(from|between|to)\b/i;
+const ROUTE_CUE_PATTERN = /\b(from|between|to|toward)\b/i;
 const ROUTE_PATTERNS = [
     { pattern: /from\s+(.+?)\s+to\s+(.+)/i, requireRouteKeyword: false },
+    { pattern: /after\s+(.+?)\s+toward\s+(.+)/i, requireRouteKeyword: false },
     { pattern: /between\s+(.+?)\s+and\s+(.+)/i, requireRouteKeyword: false },
     { pattern: /(.+?)\s*→\s*(.+)/, requireRouteKeyword: false },
     { pattern: /\b([A-Za-zÅÄÖåäö][A-Za-zÅÄÖåäö'-]*)\s*-\s*([A-Za-zÅÄÖåäö][A-Za-zÅÄÖåäö'-]*)\b/, requireRouteKeyword: true }
@@ -76,7 +74,7 @@ const STOP_ROUTE_CONTEXT_CUE_PATTERNS = [
     /\b(?:to|toward|towards)\s+([A-Za-zÅÄÖåäö][A-Za-zÅÄÖåäö' -]{1,60})/i,
     /\b(?:how\s+to\s+get\s+to|how\s+to\s+reach)\s+([A-Za-zÅÄÖåäö][A-Za-zÅÄÖåäö' -]{1,60})/i
 ];
-const STOP_ROUTE_CONTEXT_TRAILING_FILLER_PATTERN = /\b(now|today|tonight|please|right now|currently)\b.*$/i;
+const STOP_ROUTE_CONTEXT_TRAILING_FILLER_PATTERN = /\b(now|today|tonight|please|right now|currently|on time)\b.*$/i;
 const STOP_ROUTE_CONTEXT_LEADING_NOISE_PATTERN = /^(?:to|toward|towards|travel|go|get|reach|head|move)\s+/i;
 
 // Normalize function used for stop detection 
@@ -151,6 +149,7 @@ const detectTrainFamily = (query) => {
     };
 
     for (const pattern of TRAIN_FAMILY_CONTEXT_PATTERNS) {
+        console.log("[Intent:TrainFamily] iterate to check pattern: ", query, pattern);
         const match = query.match(pattern);
         if (!match) continue;
 

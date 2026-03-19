@@ -17,6 +17,31 @@ const buildFallbackResponse = (notes) => ({
     notes: String(notes || "Unknown LLM response error")
 });
 
+const buildNoDirectionalMatchResponse = (message) => ({
+    answer: "I could not find a direct route matching your requested direction in the current static schedule data.",
+    static_context_used: [],
+    realtime_context_used: [],
+    related_routes: [],
+    related_train_numbers_or_groups: [],
+    confidence: "medium",
+    notes: String(message || "No directional route match found.")
+});
+
+const buildNoStaticMatchResponse = (message) => ({
+    answer: "I could not find matching static schedule information for your request.",
+    static_context_used: [],
+    realtime_context_used: [],
+    related_routes: [],
+    related_train_numbers_or_groups: [],
+    confidence: "low",
+    notes: String(message || "No static matches found.")
+});
+
+const STATUS_RESPONSE_BUILDERS = {
+    NO_DIRECTIONAL_MATCH: buildNoDirectionalMatchResponse,
+    NO_STATIC_MATCH: buildNoStaticMatchResponse
+};
+
 const normalizeLLMResponse = (parsed) => {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         return buildFallbackResponse("LLM output was not a JSON object.");
@@ -51,14 +76,21 @@ const normalizeLLMResponse = (parsed) => {
  * @param {string} queryText  -  User original query question
  * @param {Array} staticDocs - Array of MongoDB stored GTFS documents
  * @param {Object} realtime - Interpreted realtime object package
+ * @param {Object} retrievalStatus - Structured retrieval status from retriever
  * @returns 
  */
-const generateResponse = async(queryText, staticDocs = [], realtime = {}) => {
+const generateResponse = async(queryText, staticDocs = [], realtime = {}, retrievalStatus = {}) => {
     if (!aiClient) {
         return buildFallbackResponse("LLM API Key is required.");
     }
 
-    console.log("[LLM Service] received static and RT context:\n ", staticDocs, realtime);
+    console.log("[LLM Service] received static and RT context:\n ", staticDocs, realtime, retrievalStatus);
+
+    const statusBuilder = STATUS_RESPONSE_BUILDERS[retrievalStatus?.code];
+    if (statusBuilder) {
+        console.log(`[LLM Service] short-circuit response on retrieval status ${retrievalStatus.code}.`);
+        return statusBuilder(retrievalStatus.message);
+    }
 
     // 1. Set up time awareness for questions on "next", "now"
     const now = new Date();

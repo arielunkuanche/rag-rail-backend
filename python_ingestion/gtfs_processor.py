@@ -3,7 +3,7 @@ import requests
 import zipfile
 import io
 import pandas as pd
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 from datetime import datetime, timezone
 import re
 
@@ -77,6 +77,62 @@ class GTFSProcessor:
         except ValueError as e:
             return f"Error in get route type {e} and invalid Service type ({route_type})"
 
+    def _extract_train_family(self, route_short_name: str) -> str:
+        """Extract normalized train family from routes.txt route_short_name (e.g. IC 45 -> IC, R -> R)."""
+        if pd.isna(route_short_name):
+            return ""
+
+        text = str(route_short_name).strip()
+        if not text:
+            return ""
+
+        match = re.match(r'^([A-Za-zÅÄÖåäö]+)', text)
+        return match.group(1).strip().upper() if match else ""
+
+    def _normalize_train_number(self, train_number: str) -> str:
+        """Normalize trip_pattern train number text for stable backend filtering."""
+        if pd.isna(train_number):
+            return ""
+
+        text = str(train_number).strip().upper()
+        if not text:
+            return ""
+
+        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"\b(IC|S|HDM|PYO|HL)\s*(\d+)\b", r"\1 \2", text)
+        text = re.sub(r"\b([A-Z])\s*\(\s*HL\s*(\d+)\s*\)", r"\1 (HL \2)", text)
+        return text.strip()
+
+    def _extract_origin_destination(self, route_long_name: str) -> Tuple[str, str]:
+        """Extract origin/destination from routes.txt route_long_name in format 'Origin - Destination'."""
+        if pd.isna(route_long_name):
+            return "", ""
+
+        text = str(route_long_name).strip()
+        if not text:
+            return "", ""
+
+        parts = re.split(r"\s*[-–—]\s*", text, maxsplit=1)
+        if len(parts) < 2:
+            return "", ""
+
+        origin = parts[0].strip()
+        destination = parts[1].strip()
+        return origin, destination
+
+    def _build_route_pattern_id(self, route_id: str, origin: str, destination: str) -> str:
+        """Build stable route-pattern identifier with routeID + origin and destination."""
+        def normalize_part(value: str) -> str:
+            return re.sub(r"\s+", "", str(value or "").strip())
+
+        route_part = normalize_part(route_id)
+        origin_part = normalize_part(origin)
+        destination_part = normalize_part(destination)
+
+        if origin_part and destination_part:
+            return f"{route_part}_{origin_part}_{destination_part}"
+        return route_part
+
     def process_stops(self) -> List[Dict]:
         """Process stops data into structured document"""
         if 'stops' not in self.data:
@@ -122,17 +178,21 @@ class GTFSProcessor:
         for _, row in routes_df.iterrows():
             route_type_code = row.get('route_type', 'Unknown route type code')
             route_type_description = self._get_route_type_description(route_type=route_type_code)
+            route_short_name = str(row.get('route_short_name', '')).strip()
+            route_long_name = str(row.get('route_long_name', '')).strip()
+            route_id = str(row.get('route_id'))
+            origin, destination = self._extract_origin_destination(route_long_name)
+            train_family_normalized = self._extract_train_family(route_short_name)
+            route_pattern_id = self._build_route_pattern_id(route_id, origin, destination)
 
             agency_id = row.get('agency_id', "Unknown agency")
             agency_name = self._get_agency_name(agency_id)
 
-            # text = f"Route: {row.get('route_long_name', '')} ({row.get('route_short_name', '')}). "
-            # text += f"Type: {row.get('route_type', 'N/A')}. "
             text = (
-                f"Route {row['route_id']}: {row.get('route_long_name', '')} ({row.get('route_short_name', '')}). "
+                f"Route {route_id}: {route_long_name} ({route_short_name}). "
                 f"The route is operated by agency {agency_name} (ID: {agency_id}), "
                 f"and provides a {route_type_description} service. "
-                f"This document describes the general, date-agnostic characteristics of the route."
+                f"This document describes the general characteristics of the route from {origin} to {destination}."
             )
             if pd.notna(row.get('route_desc')):
                 text += f"Description: {row['route_desc']}"
@@ -141,9 +201,13 @@ class GTFSProcessor:
                 'text': text,
                 'metadata': {
                     'type': 'route',
-                    'route_id': str(row.get('route_id')),
-                    'route_short_name': str(row.get('route_short_name', '')),
-                    'route_long_name': str(row.get('route_long_name', '')),
+                    'route_id': route_id,
+                    'route_short_name': route_short_name,
+                    'route_long_name': route_long_name,
+                    'origin': origin,
+                    'destination': destination,
+                    'route_pattern_id': route_pattern_id,
+                    'train_family_normalized': train_family_normalized,
                     'agency_id': str(agency_id),
                     'route_type': route_type_code,
                     'updated_at': datetime.now(timezone.utc).isoformat()
@@ -178,6 +242,16 @@ class GTFSProcessor:
             )
             print(f"Stop_times merged trips file rows: {len(stop_times_df)}")
             print(f"stop_times_df table head after merged with 'trips':\n {stop_times_df.head()}")
+
+        # Enrich with route_short_name so train family can be normalized from routes metadata.
+        if 'routes' in self.data and 'route_id' in self.data['routes'].columns:
+            route_projection = self.data['routes'][['route_id', 'route_short_name']].drop_duplicates(subset=['route_id'])
+            stop_times_df = stop_times_df.merge(
+                route_projection,
+                on='route_id',
+                how='left'
+            )
+            print(f"Stop_times merged routes file rows: {len(stop_times_df)}")
         
         # Get all stop names based on stop_id
         stop_times_df['stop_name'] = stop_times_df['stop_id'].apply(self._get_stop_name)
@@ -200,6 +274,13 @@ class GTFSProcessor:
 
             route_id = str(group_sorted.iloc[0]['route_id'])
             train_number = str(group_sorted.iloc[0]['train_number'])
+            route_short_name = group_sorted.iloc[0].get('route_short_name', '')
+            route_short_name = "" if pd.isna(route_short_name) else str(route_short_name)
+            train_number_normalized = self._normalize_train_number(train_number)
+            train_family_normalized = (
+                self._extract_train_family(route_short_name)
+                or self._extract_train_family(train_number_normalized)
+            )
 
             origin_stop = str(group_sorted.iloc[0]['stop_name'])
             destination_stop = str(
@@ -207,6 +288,7 @@ class GTFSProcessor:
                 if pd.notna(group_sorted.iloc[0]['trip_headsign'])
                 else group_sorted.iloc[-1].get('stop_name', 'Unknown')
             )
+            route_pattern_id = self._build_route_pattern_id(route_id, origin_stop, destination_stop)
 
             # Collect formatted stops for each trip
             formatted_stops = []
@@ -226,8 +308,11 @@ class GTFSProcessor:
                 'trip_id': trip_id,
                 'route_id': route_id,
                 'train_number': train_number,
+                'train_number_normalized': train_number_normalized,
+                'train_family_normalized': train_family_normalized,
                 'origin': origin_stop,
                 'destination': destination_stop,
+                'route_pattern_id': route_pattern_id,
                 'formatted_stops': formatted_stops,
                 'stops': stop_names
             })
@@ -272,8 +357,11 @@ class GTFSProcessor:
                     'trip_id': trip['trip_id'],
                     'route_id': trip['route_id'],
                     'train_number': trip['train_number'],
+                    'train_number_normalized': trip['train_number_normalized'],
+                    'train_family_normalized': trip['train_family_normalized'],
                     'origin': trip['origin'],
                     'destination': trip['destination'],
+                    'route_pattern_id': trip['route_pattern_id'],
                     'stop_count': len(trip['formatted_stops']),
                     'stops':trip['stops'],
                     'formatted_stops': trip['formatted_stops'],

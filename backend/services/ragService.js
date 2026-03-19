@@ -55,7 +55,12 @@ const getRagResults =  async(queryText) => {
         };
 
         // Pass retrieval object to LLM to generate augmented response
-        const llmResponse = await generateResponse(queryText, retrieval.staticDocs, retrieval.realtime || {});
+        const llmResponse = await generateResponse(
+            queryText,
+            retrieval.staticDocs,
+            retrieval.realtime || {},
+            retrieval.retrievalStatus || { code: "OK", message: "" }
+        );
         const data = {
             intent: intent.intent,
             answer: llmResponse

@@ -16,6 +16,18 @@ const normalizePlaceName = (value = "") => {
         .replace(/\b\w/g, char => char.toUpperCase());
 };
 
+const isForwardStopOrder = (doc, origin, destination) => {
+    const stops = doc?.metadata?.stops;
+    if (!Array.isArray(stops) || !origin || !destination) return false;
+
+    const originIndex = stops.indexOf(origin);
+    const destinationIndex = stops.indexOf(destination);
+    const stopOrderMatch = originIndex !== -1 && destinationIndex !== -1 && originIndex < destinationIndex;
+    
+    console.log("[Route Retriever] detected route direction stops sequence: ", stopOrderMatch);
+    return stopOrderMatch;
+};
+
 const routeRetriever = async (queryText, intent) => {
     const { origin, destination } = intent.direction || {};
 
@@ -26,7 +38,12 @@ const routeRetriever = async (queryText, intent) => {
         staticDocs: [],
         realtime: {},
         routeIds: [],
-        tripIds: []
+        tripIds: [],
+        retrievalStatus: {
+            code: "OK",
+            scope: "route",
+            message: ""
+        }
     };
 
     // 1. Embed user query
@@ -35,29 +52,104 @@ const routeRetriever = async (queryText, intent) => {
     // 2. Vector search using filter
     const normalizedOrigin = normalizePlaceName(origin);
     const normalizedDestination = normalizePlaceName(destination);
-    const filter = {
+    const strictFilter = {
         "metadata.type": "trip_pattern"
     };
     if (normalizedOrigin) {
-        filter["metadata.origin"] = normalizedOrigin;
+        strictFilter["metadata.origin"] = normalizedOrigin;
     }
     if (normalizedDestination) {
-        filter["metadata.destination"] = normalizedDestination;
+        strictFilter["metadata.destination"] = normalizedDestination;
     }
 
-    console.log("\n[Route Retriever] get vector search filter: ", filter);
-    const searchResults = await vectorSearch(queryVector, {
-        filter,
-        limit: 5,
-        minScore: 0.85
+    const fallbackBothStopsFilter =
+        normalizedOrigin && normalizedDestination
+            ? {
+                "$and": [
+                    { "metadata.type": "trip_pattern" },
+                    { "metadata.stops": normalizedOrigin },
+                    { "metadata.stops": normalizedDestination }
+                ]
+            }
+            : null;
+
+    const fallbackDestinationFilter =
+        normalizedDestination
+            ? {
+                "metadata.type": "trip_pattern",
+                "metadata.stops": normalizedDestination
+            }
+            : null;
+    const hasDirectionalQuery = Boolean(normalizedOrigin && normalizedDestination);
+
+    const routeDedupe = {
+        enabled: true,
+        keyFields: ["route_pattern_id"],
+        applyTypes: ["trip_pattern"]
+    };
+
+    // Pass 1: strict endpoint match (origin + destination) and strictest minScore
+    let stageUsed = "strict_origin_destination";
+    console.log("\n[Route Retriever] vector search strict filter: ", strictFilter);
+    let searchResults = await vectorSearch(queryVector, {
+        filter: strictFilter,
+        limit: 8,
+        minScore: 0.70,
+        dedupe: routeDedupe
     });
-    console.log(`\n[Route Retriever] static vector search results: \n`, searchResults);
+
+    // Pass 2: boarding-stop fallback for natural phrasing "from <intermediate stop> to <destination>"
+    // Lower minScore for fallback
+    if (searchResults.length === 0 && fallbackBothStopsFilter) {
+        stageUsed = "fallback_both_stops";
+        console.log("[Route Retriever] strict filter returned 0 results. Trying both-stops fallback:", fallbackBothStopsFilter);
+        const bothStopsResults = await vectorSearch(queryVector, {
+            filter: fallbackBothStopsFilter,
+            limit: 8,
+            minScore: 0.70,
+            dedupe: routeDedupe
+        });
+
+        // Filter only matched user query route.origin + destination direction matched
+        searchResults = bothStopsResults.filter(doc =>
+            isForwardStopOrder(doc, normalizedOrigin, normalizedDestination)
+        );
+        if (searchResults.length === 0) {
+            console.log("[Route Retriever] both-stops fallback had no forward-direction matches.");
+        }
+    }
+
+    // Pass 3: destination-only fallback only when origin is missing/uncertain.
+    // For explicit "from X to Y" queries, skip this stage to avoid wrong-direction leakage.
+    if (searchResults.length === 0 && fallbackDestinationFilter && !hasDirectionalQuery) {
+        stageUsed = "fallback_destination_in_stops";
+        console.log("[Route Retriever] previous stages returned 0 results. Trying destination-in-stops fallback:", fallbackDestinationFilter);
+        searchResults = await vectorSearch(queryVector, {
+            filter: fallbackDestinationFilter,
+            limit: 8,
+            minScore: 0.70,
+            dedupe: routeDedupe
+        });
+    }
+
+    if (searchResults.length === 0 && hasDirectionalQuery) {
+        stageUsed = "no_directional_match";
+        retrieverPackage.retrievalStatus = {
+            code: "NO_DIRECTIONAL_MATCH",
+            scope: "route",
+            message: `No directional route match found from ${origin} to ${destination}.`
+        };
+        console.log("[Route Retriever] no directional match found for explicit origin/destination query.");
+    }
+
+    console.log("[Route Retriever] final retrieval stage used:", stageUsed);
+    console.log(`\n[Route Retriever] static vector search results: \ntrip_pattern=${searchResults.length} \n`, searchResults);
 
     retrieverPackage.staticDocs = searchResults;
 
     // 3. Extract Ids
-    const routeIds = [...new Set(searchResults.map(doc => doc.metadata.route_id))];
-    const tripIds = [...new Set(searchResults.map(doc => doc.metadata.trip_id))];
+    const routeIds = [...new Set(searchResults.map(doc => doc.metadata.route_id).filter(Boolean))];
+    const tripIds = [...new Set(searchResults.map(doc => doc.metadata.trip_id).filter(Boolean))];
     console.log("[Route Retriever]routeIds and tripIds set from search results: ", routeIds, tripIds);
 
     retrieverPackage.routeIds = routeIds;
