@@ -70,7 +70,14 @@ const getRagResults =  async(queryText) => {
         return data;
     } catch (err) {
         console.error(`Error in RAG service: ${err}` );
-        throw new Error(`Failed to augment answer: ${err || "Unknown RAG process error"}`);
+        const publicError = new Error("Failed to augment answer.");
+        publicError.status = 502;
+        publicError.code = "RAG_PROCESSING_FAILED";
+        publicError.details = {
+            stage: "rag_service",
+            code: "RAG_PROCESSING_FAILED"
+        };
+        throw publicError;
     }
 
 }

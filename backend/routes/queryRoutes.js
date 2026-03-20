@@ -2,6 +2,7 @@ const express = require("express");
 const queryRouter = express.Router();
 const { getRagResults } = require("../services/ragService");
 const { validateQueryBody } = require("../middleware/queryValidationMiddleware");
+const { sendErrorResponse } = require("../middleware/errorResponseMiddleware");
 
 /**
  * POST /api/query/search
@@ -9,7 +10,7 @@ const { validateQueryBody } = require("../middleware/queryValidationMiddleware")
  * Expected body: { queryText: "your question about Finnish railways" }
  * Added route-specific middleware to check user queries
  */
-queryRouter.post("/search", validateQueryBody, async (req, res) => {
+queryRouter.post("/search", validateQueryBody, async (req, res, next) => {
     try {
         const { queryText } = req.body;
 
@@ -32,9 +33,18 @@ queryRouter.post("/search", validateQueryBody, async (req, res) => {
         if (res.headersSent || (req.isTimedOut && req.isTimedOut())) {
             return;
         }
-        res.status(500).json({ 
-            error: "Query processing failed",
-            details: `${err || "Internal server error"}`
+        if (err?.status || err?.code) {
+            return next(err);
+        }
+        return sendErrorResponse(res, {
+            status: 500,
+            code: "QUERY_PROCESSING_FAILED",
+            message: "Query processing failed.",
+            requestId: req.requestId || null,
+            details: {
+                stage: "query_route",
+                code: "QUERY_PROCESSING_FAILED"
+            }
         });
     }
 });

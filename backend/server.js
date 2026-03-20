@@ -4,11 +4,13 @@ const helmet = require("helmet");
 const dotenv = require("dotenv");
 const { connectDB } = require("./config/db");
 const { loadStops } = require("./services/stopService");
+const { getRealtimeDiagnostic } = require("./services/gtfsRtService");
 const { validateEnv } = require("./config/validateEnv");
 const { healthHandler, readyHandler, requireReady } = require("./middleware/readinessMiddleware");
 const { requestContextMiddleware } = require("./middleware/requestContextMiddleware");
 const { requestDebugMiddleware } = require("./middleware/requestDebugMiddleware");
 const { requestTimeoutMiddleware } = require("./middleware/requestTimeoutMiddleware");
+const { errorResponseMiddleware } = require("./middleware/errorResponseMiddleware");
 const { queryRouter } = require("./routes/queryRoutes");
 
 dotenv.config();
@@ -37,19 +39,17 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", healthHandler(runtimeState));
+app.get("/health/realtime", async (req, res) => {
+    const diagnostic = await getRealtimeDiagnostic();
+    return res.status(diagnostic.reachable ? 200 : 503).json(diagnostic);
+});
 app.get("/ready", readyHandler(runtimeState));
 
 // Added endpoint validation middleware
 app.use("/api/query", requestTimeoutMiddleware, requireReady(runtimeState), queryRouter);
 
 // Error Handler
-app.use((err, req, res, next) => {
-    if (res.headersSent) {
-        return next(err);
-    }
-    console.error("Error detected in error handler: ", err.stack);
-    res.status(500).json({ message: "Something broke."})
-});
+app.use(errorResponseMiddleware);
 
 // Only start server when DB connection success
 const startServer = async() => {

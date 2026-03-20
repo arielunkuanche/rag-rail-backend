@@ -1,3 +1,4 @@
+const { sendErrorResponse } = require("./errorResponseMiddleware");
 const MIN_QUERY_LENGTH = 2;
 const MAX_QUERY_LENGTH = 500;
 
@@ -5,26 +6,32 @@ const validateQueryBody = (req, res, next) => {
     const { queryText } = req.body || {};
 
     if (typeof queryText !== "string") {
-        return res.status(400).json({
-            error: "Invalid request body",
+        return sendErrorResponse(res, {
+            status: 400,
             code: "INVALID_QUERY_BODY",
+            message: "Invalid request body.",
+            requestId: req.requestId || null,
             details: "queryText must be a string."
         });
     }
 
     const trimmedQuery = queryText.trim();
     if (trimmedQuery.length < MIN_QUERY_LENGTH) {
-        return res.status(400).json({
-            error: "Invalid query text",
+        return sendErrorResponse(res, {
+            status: 400,
             code: "QUERY_TEXT_TOO_SHORT",
+            message: "Invalid query text.",
+            requestId: req.requestId || null,
             details: `queryText must be at least ${MIN_QUERY_LENGTH} characters.`
         });
     }
 
     if (trimmedQuery.length > MAX_QUERY_LENGTH) {
-        return res.status(400).json({
-            error: "Invalid query text",
+        return sendErrorResponse(res, {
+            status: 400,
             code: "QUERY_TEXT_TOO_LONG",
+            message: "Invalid query text.",
+            requestId: req.requestId || null,
             details: `queryText must be at most ${MAX_QUERY_LENGTH} characters.`
         });
     }

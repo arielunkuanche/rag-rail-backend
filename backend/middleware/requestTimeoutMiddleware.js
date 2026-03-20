@@ -1,3 +1,4 @@
+const { sendErrorResponse } = require("./errorResponseMiddleware");
 const QUERY_TIMEOUT_MS = 35_000;
 
 const requestTimeoutMiddleware = (req, res, next) => {
@@ -9,11 +10,14 @@ const requestTimeoutMiddleware = (req, res, next) => {
         timedOut = true;
         req.timedOut = true;
 
-        res.status(504).json({
-            error: "Request timed out",
+        sendErrorResponse(res, {
+            status: 504,
             code: "REQUEST_TIMEOUT",
-            timeoutMs: QUERY_TIMEOUT_MS,
-            requestId: req.requestId || null
+            message: "Request timed out.",
+            requestId: req.requestId || null,
+            extra: {
+                timeoutMs: QUERY_TIMEOUT_MS
+            }
         });
     }, QUERY_TIMEOUT_MS);
 

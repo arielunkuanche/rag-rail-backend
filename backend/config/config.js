@@ -2,21 +2,21 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 // MongoDB Settings
-const dbName = "finnish_railway_rag";
-const collectionName = "gtfs_embeddings";
-const vectorIndex = "gtfs_vectorIndex";
+const dbName = process.env.DB_NAME;
+const collectionName = process.env.COLLECTION_NAME;
+const vectorIndex = process.env.VECTOR_INDEX_NAME;
 
 // Hugging Face Embedding Model
-const embeddingModel= "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2";
+const embeddingModel = process.env.EMBEDDING_MODEL;
 const apiUrl = `https://router.huggingface.co/hf-inference/models/${embeddingModel}/pipeline/feature-extraction`;
 const hfApiKey = process.env.HUGGINGFACE_API_KEY || ""; // Load key from environment
 
 // Gemini AI Settings
-const genAiModel =  "gemini-2.5-flash";
+const genAiModel = process.env.GENAI_MODEL;
 
 // GTFS-RT
-const gtfsRtUrl = "https://rata.digitraffic.fi/api/v1/trains/gtfs-rt-updates";
-const digiTrafficUserHeader = "ensiJuna/GtfsSystem";
+const gtfsRtUrl = process.env.GTFS_RT_URL;
+const digiTrafficUserHeader = process.env.DIGITRAFFIC_USER_HEADER;
 
 module.exports = {
     dbName,

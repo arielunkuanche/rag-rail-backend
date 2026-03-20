@@ -7,14 +7,14 @@ dotenv.config();
 const key = process.env.GEMINI_API_KEY;
 const aiClient = key ? new GoogleGenAI({ apiKey: key }) : null;
 
-const buildFallbackResponse = (notes) => ({
+const buildFallbackResponse = (notes = "Technical error while processing the request.") => ({
     answer: "I encountered a technical error while processing the data.",
     static_context_used: [],
     realtime_context_used: [],
     related_routes: [],
     related_train_numbers_or_groups: [],
     confidence: "low",
-    notes: String(notes || "Unknown LLM response error")
+    notes
 });
 
 const buildNoDirectionalMatchResponse = (message) => ({
@@ -200,7 +200,7 @@ const generateResponse = async(queryText, staticDocs = [], realtime = {}, retrie
         return finalAnswer;
     } catch (err) {
         console.error(`Error in LLM service while generating response: ${err}` );
-        return buildFallbackResponse(err);
+        return buildFallbackResponse("LLM response generation failed.");
     }
 }
 

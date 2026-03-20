@@ -5,21 +5,20 @@ load_dotenv()
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv('MONGODB_URI')
-DATABASE_NAME = 'finnish_railway_rag'
-COLLECTION_NAME = 'gtfs_embeddings'
-VECTOR_INDEX_NAME = 'gtfs_vectorIndex'
+DATABASE_NAME = os.getenv('DB_NAME')
+COLLECTION_NAME = os.getenv('COLLECTION_NAME')
+VECTOR_INDEX_NAME = os.getenv('VECTOR_INDEX_NAME')
 
 # GTFS Data Sources
-GTFS_STATIC_URL = 'https://rata.digitraffic.fi/api/v1/trains/gtfs-passenger-stops.zip'
-GTFS_RT_URL = 'https://rata.digitraffic.fi/api/v1/trains/gtfs-rt-updates'
+GTFS_STATIC_URL = os.getenv('GTFS_STATIC_URL')
 
 # Embedding Model
-EMBEDDING_MODEL = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL')
 # EMBEDDING_MODEL = 'intfloat/multilingual-e5-small'
 # EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 # EMBEDDING_MODEL = 'multi-qa-MiniLM-L6-cos-v1'
-EMBEDDING_DIMENSION = 384
+EMBEDDING_DIMENSION = int(os.getenv('EMBEDDING_DIMENSION'))
 
 # Chunking Configuration
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = int(os.getenv('CHUNK_SIZE'))
+CHUNK_OVERLAP = int(os.getenv('CHUNK_OVERLAP'))

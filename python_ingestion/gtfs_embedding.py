@@ -14,7 +14,7 @@ class EmbeddingGenerator:
 
         self.model = SentenceTransformer(model_name)
         self.max_docs = max_docs
-        print(f"Model loaded successfully {time.time() - start: .2f} s")
+        print(f"-> ✅ Embedding model loaded in {time.time() - start:.2f} s")
 
     def generate_embedding_single(self, text: str) -> List[float]:
         """Generate embedding for a single text query."""
@@ -50,6 +50,7 @@ class EmbeddingGenerator:
             total_docs = self.max_docs
 
         print(f"--- 6. Batch embedding starts for {total_docs} documents ---")
+        batch_start = time.time()
         for batch, start_idx in self._batch_iterator(documents, batch_size):
             texts = [d['text'] for d in batch]
             try:
@@ -71,5 +72,5 @@ class EmbeddingGenerator:
             if (start_idx + len(batch)) % (batch_size * 5) == 0:
                 print(f"   -> Embedded {start_idx + len(batch)} / {total_docs} docs")
 
-        print("✅ Embedding generation completed.")
+        print(f"-> ✅ Embedding generation completed in {time.time() - batch_start:.2f} s")
         return documents

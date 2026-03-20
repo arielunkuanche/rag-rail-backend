@@ -149,4 +149,38 @@ const fetchRealTimeUpdates = async(forceRefresh = false) => {
 
 }
 
-module.exports = { fetchRealTimeUpdates }
+const getRealtimeDiagnostic = async () => {
+    try {
+        const realtimeResult = await fetchRealTimeUpdates(false);
+        const payload = realtimeResult.data || {};
+
+        return {
+            status: "ok",
+            reachable: true,
+            source: realtimeResult.source,
+            fetchedAt: realtimeResult.timestamp ? new Date(realtimeResult.timestamp).toISOString() : null,
+            cacheAgeMs: realtimeResult.timestamp ? Math.max(0, Date.now() - realtimeResult.timestamp) : null,
+            counts: {
+                tripUpdates: Array.isArray(payload.tripUpdates) ? payload.tripUpdates.length : 0,
+                vehicleUpdates: Array.isArray(payload.vehicleUpdates) ? payload.vehicleUpdates.length : 0,
+                alertUpdates: Array.isArray(payload.alertUpdates) ? payload.alertUpdates.length : 0
+            }
+        };
+    } catch (err) {
+        return {
+            status: "unavailable",
+            reachable: false,
+            source: "error",
+            fetchedAt: null,
+            cacheAgeMs: null,
+            counts: {
+                tripUpdates: 0,
+                vehicleUpdates: 0,
+                alertUpdates: 0
+            },
+            error: "GTFS-RT diagnostic fetch failed."
+        };
+    }
+};
+
+module.exports = { fetchRealTimeUpdates, getRealtimeDiagnostic }

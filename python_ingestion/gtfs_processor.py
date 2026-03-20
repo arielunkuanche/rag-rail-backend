@@ -1,4 +1,3 @@
-import os
 import requests
 import zipfile
 import io
@@ -6,6 +5,7 @@ import pandas as pd
 from typing import Dict, List, Set, Tuple
 from datetime import datetime, timezone
 import re
+import time
 
 class GTFSProcessor:
     ROUTE_TYPE_MAPPING = {
@@ -13,6 +13,9 @@ class GTFSProcessor:
         103: "Inter Regional Rail Service",
         109: "Suburban Railway",
     }
+    GTFS_DOWNLOAD_TIMEOUT_SEC = 30
+    GTFS_DOWNLOAD_MAX_ATTEMPTS = 3
+    GTFS_DOWNLOAD_BACKOFF_SEC = 5
 
     def __init__(self, gtfs_url: str):
         """Initialize GTFS processor with data source URL"""
@@ -22,8 +25,28 @@ class GTFSProcessor:
     def download_and_extract(self) -> Dict[str, pd.DataFrame]:
         """Download and extract GTFS data"""
         print(f"--- 1. Downloading GTFS data from {self.gtfs_url} ---")
-        response = requests.get(self.gtfs_url)
-        response.raise_for_status()
+        download_start = time.time()
+        response = None
+
+        for attempt in range(1, self.GTFS_DOWNLOAD_MAX_ATTEMPTS + 1):
+            try:
+                print(
+                    f"--- GTFS download attempt {attempt}/{self.GTFS_DOWNLOAD_MAX_ATTEMPTS} "
+                    f"(timeout={self.GTFS_DOWNLOAD_TIMEOUT_SEC}s) ---"
+                )
+                response = requests.get(self.gtfs_url, timeout=self.GTFS_DOWNLOAD_TIMEOUT_SEC)
+                response.raise_for_status()
+                break
+            except requests.RequestException as err:
+                print(f"--- GTFS download attempt {attempt} failed: {err} ---")
+                if attempt == self.GTFS_DOWNLOAD_MAX_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Failed to download GTFS data after {self.GTFS_DOWNLOAD_MAX_ATTEMPTS} attempts."
+                    ) from err
+
+                print(f"--- Retrying GTFS download in {self.GTFS_DOWNLOAD_BACKOFF_SEC} seconds ---")
+                time.sleep(self.GTFS_DOWNLOAD_BACKOFF_SEC)
+
         print(f"\n--- Response status {response} ---")
 
         print(f"--- 2. Extracting files... ---")
@@ -37,6 +60,7 @@ class GTFSProcessor:
                         print(f"--- Loaded {table_name}: {len(self.data[table_name])} rows ---")
         
         print(f" \n-> Successfully extract all zip files ---")
+        print(f"-> ✅ GTFS download + extract completed in {time.time() - download_start:.2f} s")
         return self.data
 
     def _get_stop_name(self, stop_id: str) -> str:
@@ -132,6 +156,59 @@ class GTFSProcessor:
         if origin_part and destination_part:
             return f"{route_part}_{origin_part}_{destination_part}"
         return route_part
+
+    def _print_train_number_coverage_summary(self, unique_trips: List[Dict]) -> None:
+        """Print ingestion audit metrics for raw and normalized train-number coverage."""
+        total_trips = len(unique_trips)
+        if total_trips == 0:
+            print("[INGEST AUDIT][TrainNumberCoverage] No trip patterns were generated.")
+            return
+
+        raw_present = 0
+        raw_missing = 0
+        normalized_present = 0
+        normalized_missing = 0
+        family_present = 0
+        family_missing = 0
+        placeholder_count = 0
+
+        for trip in unique_trips:
+            train_number = str(trip.get('train_number', '')).strip()
+            train_number_normalized = str(trip.get('train_number_normalized', '')).strip()
+            train_family_normalized = str(trip.get('train_family_normalized', '')).strip()
+
+            is_placeholder = train_number == 'Unknown Train Number'
+            if is_placeholder:
+                placeholder_count += 1
+
+            if train_number and not is_placeholder:
+                raw_present += 1
+            else:
+                raw_missing += 1
+
+            if train_number_normalized:
+                normalized_present += 1
+            else:
+                normalized_missing += 1
+
+            if train_family_normalized:
+                family_present += 1
+            else:
+                family_missing += 1
+
+        print(
+            "[INGEST AUDIT][TrainNumberCoverage]",
+            {
+                'trip_patterns_total': total_trips,
+                'raw_train_number_present': raw_present,
+                'raw_train_number_missing': raw_missing,
+                'raw_train_number_placeholder': placeholder_count,
+                'train_number_normalized_present': normalized_present,
+                'train_number_normalized_missing': normalized_missing,
+                'train_family_normalized_present': family_present,
+                'train_family_normalized_missing': family_missing
+            }
+        )
 
     def process_stops(self) -> List[Dict]:
         """Process stops data into structured document"""
@@ -316,6 +393,7 @@ class GTFSProcessor:
                 'formatted_stops': formatted_stops,
                 'stops': stop_names
             })
+        self._print_train_number_coverage_summary(unique_trips)
         print(f"\n unique_trips array first element: \n {unique_trips[0]}")
         # Dedupe patterns by semantic key
         documents = []
