@@ -12,8 +12,10 @@ const normalizePlaceName = (value = "") => {
         .trim()
         .replace(/[.,?!:;()]+$/g, "")
         .replace(/\s+/g, " ")
-        .toLowerCase()
-        .replace(/\b\w/g, char => char.toUpperCase());
+        .toLocaleLowerCase("fi-FI")
+        .split(" ")
+        .map(token => token ? token[0].toLocaleUpperCase("fi-FI") + token.slice(1) : token)
+        .join(" ");
 };
 
 const isForwardStopOrder = (doc, origin, destination) => {

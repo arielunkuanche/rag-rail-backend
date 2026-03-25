@@ -12,14 +12,40 @@ const normalizePlaceName = (value = "") => {
         .trim()
         .replace(/[.,?!:;()]+$/g, "")
         .replace(/\s+/g, " ")
-        .toLowerCase()
-        .replace(/\b\w/g, char => char.toUpperCase());
+        .toLocaleLowerCase("fi-FI")
+        .split(" ")
+        .map(token => token ? token[0].toLocaleUpperCase("fi-FI") + token.slice(1) : token)
+        .join(" ");
+};
+
+const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeQueryText = (value = "") => value
+    .trim()
+    .replace(/[.,?!:;()]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+const hasDestinationCueForStop = (queryText, stopName) => {
+    const normalizedStop = normalizeQueryText(stopName);
+    const normalizedQuery = normalizeQueryText(queryText);
+    if (!normalizedStop || !normalizedQuery) return false;
+
+    const destinationCuePattern = new RegExp(
+        `\\b(?:to|toward|towards)\\s+${escapeRegex(normalizedStop)}\\b`,
+        "i"
+    );
+
+    return destinationCuePattern.test(normalizedQuery);
 };
 
 const stopRetriever = async (queryText, intent) => {
     // 1. Resolve stop object
     const stopObject = intent.stop;
-    const routeContext = intent.routeContext || null;
+    const queryTargetsStopAsDestination = hasDestinationCueForStop(queryText, stopObject?.stop_name);
+    const routeContext = intent.routeContext || (queryTargetsStopAsDestination
+        ? { destination: stopObject.stop_name }
+        : null);
     if (!stopObject) return null;
     console.log("[Stop Retriever] get stop object from DB: ", stopObject);
 

@@ -411,6 +411,11 @@ npm test
 Note:
 
 - the backend uses Node's built-in test command in `package.json`
+- current implemented backend coverage is high-level but meaningful:
+  - intent-detection unit tests
+  - retriever, embedding, LLM, and GTFS-RT component tests
+  - API tests for readiness, success, validation, timeout, and internal-error paths
+  - one route-query integration slice through the request flow
 
 ### Python Tests
 
@@ -430,11 +435,25 @@ pytest -m dbConnection
 
 Relevant test files:
 
-- `python_ingestion/tests/test_ingestion.py`
+- `python_ingestion/tests/test_gtfs_processor.py`
+- `python_ingestion/tests/test_main_helpers.py`
+- `python_ingestion/tests/test_mongodb_client.py`
+- `python_ingestion/tests/test_ingestion_e2e.py`
 
 Notes:
 
+- current implemented Python coverage includes:
+  - GTFS download and retry behavior
+  - GTFS helper normalization and document generation
+  - `main.py` helper logic for validation and backup cleanup
+  - MongoDB client conversion and collection utility behavior
+  - one full ingestion refresh workflow with stubbed dependencies
 - the `python_ingestion/requirements.txt` now contains the direct runtime and remaining test dependencies only
+
+More detail:
+
+- `docs/current-test-coverage.md`
+- `docs/test-executing-plan.md`
 
 ---
 

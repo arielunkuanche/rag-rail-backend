@@ -10,12 +10,12 @@
 const { getStopByQuery } = require("../services/stopService");
 
 const EXACT_TRAIN_PATTERNS = [
+    /\b[A-Z]\s*\(HL\s*\d+\)/i,
     /\bIC\s?\d+\b/i,
     /\bS\s?\d+\b/i,
     /\bHDM\s?\d+\b/i,
     /\bPYO\s?\d+\b/i,
     /\bHL\s?\d+\b/i,
-    /\b[A-Z]\s?\(HL\s*\d+\)\b/i,
 ];
 
 /** 
@@ -191,7 +191,9 @@ const detectStopIntent = (query) => {
  */
 const detectRouteIntent = (query) => {
     const lowered = query.toLowerCase();
+    console.log("detectRouteIntent lowered query: ", lowered);
     const hasRouteKeyword = ROUTE_KEYWORDS.some(keyword => lowered.includes(keyword));
+    console.log("detectRouteIntent route keyword found?: ", hasRouteKeyword);
 
     for (const routePattern of ROUTE_PATTERNS) {
         if (routePattern.requireRouteKeyword && !hasRouteKeyword) continue;
